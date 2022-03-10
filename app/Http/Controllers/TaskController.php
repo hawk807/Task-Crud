@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Settings;
 use App\Models\Task;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
@@ -17,10 +18,9 @@ class TaskController extends Controller
     {
         $tasks = Task::latest()->paginate(5);
         date_default_timezone_set('UTC');
+        $timezone_name = Settings::latest()->limit(1)->pluck('default_timezone')[0] ?? 'UTC';
         foreach ($tasks as $key=>$task){
-            $timezone_offset_minutes = $task['timezone_difference'];
-            $timezone_name = timezone_name_from_abbr("", $timezone_offset_minutes*60, false);
-            $tasks[$key]['date'] = Carbon::parse($task['date'])->setTimezone($timezone_name)->format('Y-m-d H:i');
+            $tasks[$key]['date'] = Carbon::parse($tasks[$key]['date'])->setTimezone($timezone_name)->format('Y-m-d H:i');
         }
         return view('tasks.index',compact('tasks'))
             ->with('i', (request()->input('page', 1) - 1) * 5);
@@ -34,6 +34,10 @@ class TaskController extends Controller
     public function create()
     {
         return view('tasks.create');
+    }
+    public function save_timezone(Request $request)
+    {
+
     }
 
     /**
@@ -49,11 +53,10 @@ class TaskController extends Controller
             'date' => 'required',
             'timezone_difference' => 'required',
         ]);
-        $timezone_offset_minutes = $request['timezone_difference'];
-        $timezone_name = timezone_name_from_abbr("", $timezone_offset_minutes*60, false);
-        date_default_timezone_set($timezone_name);
         $input = $request->all();
-        $input['date'] = str_replace("PK","",Carbon::parse($task['date'])->setTimezone($timezone_name)->format('Y-m-dTH:i'));
+        $timezone_name = Settings::latest()->limit(1)->pluck('default_timezone')[0] ?? 'UTC';
+        date_default_timezone_set($timezone_name);
+        $input['date'] = Carbon::parse($input['date'])->setTimezone($timezone_name)->format('Y-m-d H:i');
         Task::create($input);
         return redirect()->route('tasks.index')
                         ->with('success','Task created successfully.');
@@ -67,9 +70,8 @@ class TaskController extends Controller
      */
     public function show(Task $task)
     {
-        $timezone_offset_minutes = $task['timezone_difference'];
-        $timezone_name = timezone_name_from_abbr("", $timezone_offset_minutes*60, false);
         date_default_timezone_set('UTC');
+        $timezone_name = Settings::latest()->limit(1)->pluck('default_timezone')[0] ?? 'UTC';
         $task['date'] = Carbon::parse($task['date'])->setTimezone($timezone_name)->format('Y-m-d H:i:s');
         return view('tasks.show',compact('task'));
     }
@@ -82,10 +84,14 @@ class TaskController extends Controller
      */
     public function edit(Task $task)
     {
-        $timezone_offset_minutes = $task['timezone_difference'];
-        $timezone_name = timezone_name_from_abbr("", $timezone_offset_minutes*60, false);
         date_default_timezone_set('UTC');
-        $task['date'] = str_replace("PK","",Carbon::parse($task['date'])->setTimezone($timezone_name)->format('Y-m-dTH:i'));
+        $timezone_name = Settings::latest()->limit(1)->pluck('default_timezone')[0] ?? 'UTC';
+        $date = Carbon::parse($task['date'])->setTimezone($timezone_name)->format('Y-m-dTH:i');
+        if (str_contains($date, 'IS')) {
+            $task['date'] = str_replace("IS","",$date);
+        }else{
+            $task['date'] = str_replace("PK","",$date);
+        }
         return view('tasks.edit',compact('task'));
     }
 
@@ -102,10 +108,9 @@ class TaskController extends Controller
             'task' => 'required',
             'date' => 'required',
         ]);
-        $timezone_offset_minutes = $request['timezone_difference'];
-        $timezone_name = timezone_name_from_abbr("", $timezone_offset_minutes*60, false);
-        date_default_timezone_set($timezone_name);
         $input = $request->all();
+        $timezone_name = Settings::latest()->limit(1)->pluck('default_timezone')[0] ?? 'UTC';
+        date_default_timezone_set($timezone_name);
         $input['date'] = Carbon::parse($input['date'])->setTimezone('UTC')->format('Y-m-d H:i:s');
         $task->update($input);
         return redirect()->route('tasks.index')
